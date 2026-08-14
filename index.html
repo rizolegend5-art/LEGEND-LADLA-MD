@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>RIZO PAIR STUDIO</title>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+}
+
+body{
+min-height:100vh;
+background:#05000b;
+color:white;
+display:flex;
+justify-content:center;
+align-items:center;
+padding:20px;
+overflow:hidden;
+}
+
+body::before{
+content:"";
+position:absolute;
+width:400px;
+height:400px;
+background:#ff008c;
+filter:blur(150px);
+opacity:.35;
+animation:move 6s infinite alternate;
+}
+
+@keyframes move{
+from{transform:translate(-100px,-100px)}
+to{transform:translate(100px,100px)}
+}
+
+
+.container{
+width:100%;
+max-width:430px;
+position:relative;
+z-index:2;
+}
+
+
+.card{
+
+background:rgba(255,255,255,.08);
+border:1px solid rgba(255,255,255,.15);
+border-radius:30px;
+padding:30px;
+backdrop-filter:blur(20px);
+box-shadow:0 0 40px #ff008833;
+
+}
+
+
+
+.logo{
+text-align:center;
+}
+
+
+.logo img{
+
+width:120px;
+height:120px;
+border-radius:50%;
+object-fit:cover;
+border:3px solid #ff1493;
+box-shadow:0 0 30px #ff1493;
+animation:pulse 2s infinite;
+
+}
+
+
+@keyframes pulse{
+50%{
+transform:scale(1.08);
+}
+}
+
+
+h1{
+
+text-align:center;
+margin-top:20px;
+font-size:32px;
+color:#ff70bd;
+text-shadow:0 0 20px #ff1493;
+
+}
+
+
+p{
+
+text-align:center;
+color:#aaa;
+margin-top:10px;
+
+}
+
+
+
+.line{
+
+height:2px;
+margin:25px 0;
+background:linear-gradient(90deg,transparent,#ff1493,transparent);
+
+}
+
+
+
+.box{
+
+background:rgba(255,255,255,.05);
+padding:20px;
+border-radius:20px;
+border:1px solid rgba(255,255,255,.1);
+
+}
+
+
+
+input{
+
+width:100%;
+padding:15px;
+margin-top:15px;
+border-radius:15px;
+border:1px solid #ff1493;
+background:#090510;
+color:white;
+outline:none;
+font-size:16px;
+
+}
+
+
+
+button{
+
+width:100%;
+padding:15px;
+margin-top:20px;
+border:0;
+border-radius:15px;
+background:linear-gradient(45deg,#ff008c,#7b00ff);
+color:white;
+font-weight:bold;
+font-size:17px;
+cursor:pointer;
+box-shadow:0 0 25px #ff008c;
+
+}
+
+
+
+.result{
+
+display:none;
+margin-top:20px;
+padding:20px;
+text-align:center;
+border-radius:20px;
+background:#08040d;
+border:1px solid #00ffc8;
+
+}
+
+
+.result h3{
+color:#00ffc8;
+}
+
+
+.code{
+
+font-size:35px;
+letter-spacing:5px;
+margin:15px;
+
+}
+
+
+.copy{
+
+background:#00ffc8;
+color:black;
+box-shadow:none;
+
+}
+
+
+.status{
+
+margin-top:15px;
+text-align:center;
+color:#aaa;
+
+}
+
+
+footer{
+
+text-align:center;
+margin-top:20px;
+color:#777;
+
+}
+
+</style>
+</head>
+<body>
+
+
+<div class="container">
+
+<div class="card">
+
+
+<div class="logo">
+
+<!-- Apni image URL yahan lagao -->
+
+<img src="https://files.catbox.moe/s8xvrg.png">
+
+</div>
+
+
+<h1>⚡ RIZO PAIR STUDIO ⚡</h1>
+
+<p>Secure WhatsApp Pair Code Generator</p>
+
+
+<div class="line"></div>
+
+
+<div class="box">
+
+
+<h2>🔐 Generate Code</h2>
+
+
+<input id="number" placeholder="923000000000">
+
+
+<button id="generate">
+GENERATE PAIR CODE
+</button>
+
+
+<div class="result" id="result">
+
+<h3>YOUR CODE</h3>
+
+<div class="code" id="code">
+WAITING
+</div>
+
+
+<button class="copy" id="copy">
+COPY CODE
+</button>
+
+
+</div>
+
+
+<div class="status" id="status">
+Server Ready...
+</div>
+
+
+</div>
+
+
+<footer>
+POWERED BY RIZO DEV 🔥
+</footer>
+
+
+</div>
+
+</div>
+
+<script>
+
+const socket = io();
+
+
+// ===== AUTO USER SESSION ID =====
+
+let userId = localStorage.getItem("sessionId");
+
+
+if(!userId){
+
+    userId = "user-" + Math.random()
+    .toString(36)
+    .substring(2,10);
+
+    localStorage.setItem("sessionId", userId);
+
+}
+
+
+// Register user session
+
+socket.emit("register", userId);
+
+
+
+const numberInput = document.getElementById("number");
+const generateBtn = document.getElementById("generate");
+const resultBox = document.getElementById("result");
+const codeBox = document.getElementById("code");
+const statusBox = document.getElementById("status");
+const copyBtn = document.getElementById("copy");
+
+
+
+
+// Generate Pair Code
+
+generateBtn.onclick = ()=>{
+
+
+let number = numberInput.value
+.replace(/\D/g,'');
+
+
+
+if(!number){
+
+statusBox.innerHTML="❌ Enter WhatsApp Number";
+
+return;
+
+}
+
+
+
+statusBox.innerHTML="⏳ Generating Pair Code...";
+
+generateBtn.disabled=true;
+
+
+// send request to server
+
+socket.emit(
+"pair",
+userId,
+number
+);
+
+
+};
+
+
+
+
+// Receive Pair Code
+
+socket.on("pairing-code",(code)=>{
+
+
+resultBox.style.display="block";
+
+codeBox.innerHTML = code;
+
+
+statusBox.innerHTML=
+"✅ Pair Code Generated";
+
+
+generateBtn.disabled=false;
+
+
+});
+
+
+
+
+// Connection Status
+
+socket.on("connection-status",(data)=>{
+
+
+if(data.connected){
+
+
+statusBox.innerHTML=
+"🟢 WhatsApp Connected";
+
+
+}
+
+
+});
+
+
+
+
+// Error Handler
+
+socket.on("error",(msg)=>{
+
+
+statusBox.innerHTML=
+"❌ "+msg;
+
+
+generateBtn.disabled=false;
+
+
+});
+
+
+
+
+
+// Copy Code
+
+copyBtn.onclick=()=>{
+
+
+let code =
+codeBox.innerText;
+
+
+navigator.clipboard.writeText(code);
+
+
+copyBtn.innerHTML="COPIED ✅";
+
+
+setTimeout(()=>{
+
+copyBtn.innerHTML="COPY CODE";
+
+},1500);
+
+
+
+};
+
+
+
+</script>
+
+</body>
+</html>
