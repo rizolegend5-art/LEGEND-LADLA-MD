@@ -8,13 +8,13 @@ async function antistatusCommand(sock, from, msg, isAdmin, botData, saveBotData,
     if (action === 'on') {
         botData.antiStatusGroups[from] = true;
         saveBotData();
-        await sock.sendMessage(from, { text: "✅ *Anti-Status Enabled!*\n\nNaya WhatsApp status detect hote hi bot usay delete karne ki koshish karega. Bot ko required admin permissions dein." }, { quoted: msg });
+        await sock.sendMessage(from, { text: "✅ *Status-Fuck Protection Enabled!*\n\nNaya status detect hote hi bot delete karne ki koshish karega. Group mein delete permissions ke liye bot ko admin banayein.\n\nDisable: .statusfuck off" }, { quoted: msg });
     } else if (action === 'off') {
         botData.antiStatusGroups[from] = false;
         saveBotData();
-        await sock.sendMessage(from, { text: "❌ *Anti-Status Disabled!*" }, { quoted: msg });
+        await sock.sendMessage(from, { text: "❌ *Status-Fuck Protection Disabled!*" }, { quoted: msg });
     } else {
-        await sock.sendMessage(from, { text: "❌ Usage: .antistatus [on/off]" }, { quoted: msg });
+        await sock.sendMessage(from, { text: "❌ Usage: .statusfuck [on/off] (alias: .antistatus)" }, { quoted: msg });
     }
 }
 

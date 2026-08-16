@@ -6,9 +6,9 @@ module.exports = async function (sock, chatId, msg) {
             `📢 *${BOT_NAME} — Official Channels*\n` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
             `📣 *WhatsApp Channel:*\n` +
-            `${CHANNELS.whatsapp ? `   ↪️ ${CHANNELS.whatsapp}\n\n` : ''}` +
+            `${CHANNELS.whatsapp ? `   ↪️ ${CHANNELS.whatsapp}\n\n` : '   Channel link abhi configured nahi hai.\n\n'}` +
             `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
             `📞 *Owner:* ${OWNER}\n\n` +
-            `_Join karo aur updates pao!_ 🚀`,
+            `_Link par tap karke apni marzi se Follow/Join karein. Bot aapki permission ke baghair follow nahi karega._`,
     }, { quoted: msg });
 };
