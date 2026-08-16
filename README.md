@@ -1,4 +1,4 @@
-# LEGEND LADLA LEGEND LADLI MD — WhatsApp Bot
+# LEGEND LADLA LEGEND LADLI MD — WhatsApp Bot powerful 
 
 <p align="center">
 <img src="https://files.catbox.moe/fjtb0m.jpg" width="280">
