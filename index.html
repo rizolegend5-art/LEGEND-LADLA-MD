@@ -1,464 +1,75 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>RIZO PAIR STUDIO</title>
-
+<title>LEGEND LADLA | Bot Console</title>
 <script src="/socket.io/socket.io.js"></script>
-
 <style>
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Arial,sans-serif;
-}
-
-body{
-min-height:100vh;
-background:#05000b;
-color:white;
-display:flex;
-justify-content:center;
-align-items:center;
-padding:20px;
-overflow:hidden;
-}
-
-body::before{
-content:"";
-position:absolute;
-width:400px;
-height:400px;
-background:#ff008c;
-filter:blur(150px);
-opacity:.35;
-animation:move 6s infinite alternate;
-}
-
-@keyframes move{
-from{transform:translate(-100px,-100px)}
-to{transform:translate(100px,100px)}
-}
-
-
-.container{
-width:100%;
-max-width:430px;
-position:relative;
-z-index:2;
-}
-
-
-.card{
-
-background:rgba(255,255,255,.08);
-border:1px solid rgba(255,255,255,.15);
-border-radius:30px;
-padding:30px;
-backdrop-filter:blur(20px);
-box-shadow:0 0 40px #ff008833;
-
-}
-
-
-
-.logo{
-text-align:center;
-}
-
-
-.logo img{
-
-width:120px;
-height:120px;
-border-radius:50%;
-object-fit:cover;
-border:3px solid #ff1493;
-box-shadow:0 0 30px #ff1493;
-animation:pulse 2s infinite;
-
-}
-
-
-@keyframes pulse{
-50%{
-transform:scale(1.08);
-}
-}
-
-
-h1{
-
-text-align:center;
-margin-top:20px;
-font-size:32px;
-color:#ff70bd;
-text-shadow:0 0 20px #ff1493;
-
-}
-
-
-p{
-
-text-align:center;
-color:#aaa;
-margin-top:10px;
-
-}
-
-
-
-.line{
-
-height:2px;
-margin:25px 0;
-background:linear-gradient(90deg,transparent,#ff1493,transparent);
-
-}
-
-
-
-.box{
-
-background:rgba(255,255,255,.05);
-padding:20px;
-border-radius:20px;
-border:1px solid rgba(255,255,255,.1);
-
-}
-
-
-
-input{
-
-width:100%;
-padding:15px;
-margin-top:15px;
-border-radius:15px;
-border:1px solid #ff1493;
-background:#090510;
-color:white;
-outline:none;
-font-size:16px;
-
-}
-
-
-
-button{
-
-width:100%;
-padding:15px;
-margin-top:20px;
-border:0;
-border-radius:15px;
-background:linear-gradient(45deg,#ff008c,#7b00ff);
-color:white;
-font-weight:bold;
-font-size:17px;
-cursor:pointer;
-box-shadow:0 0 25px #ff008c;
-
-}
-
-
-
-.result{
-
-display:none;
-margin-top:20px;
-padding:20px;
-text-align:center;
-border-radius:20px;
-background:#08040d;
-border:1px solid #00ffc8;
-
-}
-
-
-.result h3{
-color:#00ffc8;
-}
-
-
-.code{
-
-font-size:35px;
-letter-spacing:5px;
-margin:15px;
-
-}
-
-
-.copy{
-
-background:#00ffc8;
-color:black;
-box-shadow:none;
-
-}
-
-
-.status{
-
-margin-top:15px;
-text-align:center;
-color:#aaa;
-
-}
-
-
-footer{
-
-text-align:center;
-margin-top:20px;
-color:#777;
-
-}
-
+:root{color-scheme:dark;--bg:#070812;--card:rgba(20,24,43,.82);--line:rgba(255,255,255,.12);--muted:#9ca5c7;--pink:#ff3c9d;--purple:#8b5cf6;--cyan:#46f0cf;--danger:#ff6b7d}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 5%,#341044 0,#070812 42%),linear-gradient(135deg,#070812,#111630);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;padding:24px}
+body:before{content:"";position:fixed;inset:auto -120px -180px auto;width:420px;height:420px;background:#5e22ff55;filter:blur(100px);pointer-events:none}.wrap{max-width:980px;margin:0 auto;position:relative;z-index:1}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}.brand{display:flex;gap:13px;align-items:center}.brand-mark{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,var(--pink),var(--purple));font-size:24px;box-shadow:0 0 30px #ff3c9d55}.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--cyan);font-weight:800}.title{font-size:25px;font-weight:850;margin-top:3px}.pill{border:1px solid var(--line);padding:9px 13px;border-radius:999px;color:var(--muted);font-size:12px;white-space:nowrap}.pill.ok{border-color:#46f0cf66;color:var(--cyan)}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 18px 60px #0004;backdrop-filter:blur(18px)}.card h2{font-size:17px;margin:0 0 6px}.sub{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 18px}.label{display:block;color:#cbd2ee;font-size:12px;font-weight:700;margin:16px 0 7px}input{width:100%;border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#090c19;color:#fff;outline:none;font-size:15px}input:focus{border-color:var(--pink);box-shadow:0 0 0 3px #ff3c9d22}button{border:0;border-radius:12px;padding:13px 15px;font-weight:800;cursor:pointer;color:#fff;background:linear-gradient(100deg,var(--pink),var(--purple));box-shadow:0 9px 24px #ff3c9d2e}button:disabled{opacity:.5;cursor:not-allowed}.full{width:100%;margin-top:16px}.result{display:none;margin-top:16px;border:1px solid #46f0cf66;border-radius:15px;background:#06151a;padding:16px}.result.show{display:block}.code{font-size:32px;letter-spacing:5px;color:var(--cyan);font-weight:900;text-align:center;margin:10px 0 14px}.copy{background:#46f0cf;color:#06151a;box-shadow:none;width:100%}.status{margin-top:15px;color:var(--muted);font-size:13px}.status.good{color:var(--cyan)}.status.bad{color:var(--danger)}.linkrow{display:flex;align-items:center;gap:8px;padding:11px 12px;border:1px solid var(--line);background:#090c19;border-radius:12px;margin-top:10px}.linkrow code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;color:#e6e9ff;font-size:12px}.small{padding:8px 10px;border-radius:9px;font-size:11px;background:#252b49;box-shadow:none;white-space:nowrap}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px}.metric{border:1px solid var(--line);border-radius:13px;padding:12px;background:#0b0e1c}.metric span{display:block;color:var(--muted);font-size:11px;margin-bottom:4px}.metric strong{font-size:17px}.console{height:278px;overflow:auto;background:#05070e;border:1px solid var(--line);border-radius:13px;padding:12px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}.log{padding:2px 0;color:#b7bfdc}.log.success{color:var(--cyan)}.log.error{color:var(--danger)}.log.warning{color:#ffd166}.empty{color:#6e7797}.foot{text-align:center;color:#6f7897;font-size:11px;margin:18px 0 0}.notice{padding:11px 12px;background:#12172a;border:1px solid #59638e66;border-radius:12px;color:#bfc7e8;font-size:12px;line-height:1.5;margin-top:16px}@media(max-width:760px){body{padding:14px}.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}.title{font-size:22px}}
 </style>
 </head>
 <body>
-
-
-<div class="container">
-
-<div class="card">
-
-
-<div class="logo">
-
-<!-- Apni image URL yahan lagao -->
-
-<img src="https://files.catbox.moe/s8xvrg.png">
-
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="brand-mark">⚡</div><div><div class="eyebrow">WHATSAPP BOT HOSTING CONSOLE</div><div class="title">LEGEND LADLA LEGEND LADLI MD</div></div></div>
+    <div id="connectionPill" class="pill">Connecting…</div>
+  </div>
+  <div class="grid">
+    <section class="card" id="pair">
+      <h2>Pair your WhatsApp account</h2>
+      <p class="sub">Enter your WhatsApp number with country code, without <code>+</code> or spaces. The code will appear here and in the live console.</p>
+      <label class="label" for="number">WhatsApp number</label>
+      <input id="number" inputmode="numeric" autocomplete="tel" placeholder="923000000000">
+      <button id="generate" class="full">GENERATE PAIR CODE</button>
+      <div id="result" class="result"><div class="eyebrow">PAIRING CODE</div><div id="code" class="code">WAITING</div><button id="copy" class="copy">COPY CODE</button></div>
+      <div id="status" class="status">Starting console…</div>
+      <div class="notice">After copying the code, open WhatsApp → Linked devices → Link a device → Link with phone number instead.</div>
+    </section>
+    <aside class="card">
+      <h2>Hosting links</h2>
+      <p class="sub">These links are detected automatically from the port and reverse-proxy URL provided by your hosting panel.</p>
+      <div class="label">Web panel / port link</div>
+      <div class="linkrow"><code id="panelUrl">Detecting…</code><button class="small" data-copy="panelUrl">COPY</button></div>
+      <div class="label">Direct pair link</div>
+      <div class="linkrow"><code id="pairUrl">Detecting…</code><button class="small" data-copy="pairUrl">COPY</button></div>
+      <div class="meta"><div class="metric"><span>Listening port</span><strong id="port">—</strong></div><div class="metric"><span>Active sessions</span><strong id="sessions">0</strong></div></div>
+    </aside>
+    <section class="card" style="grid-column:1/-1">
+      <h2>Live bot console</h2>
+      <p class="sub">Runtime messages, pairing updates, reconnects, and errors appear below.</p>
+      <div id="console" class="console"><div class="empty">Waiting for server logs…</div></div>
+    </section>
+  </div>
+  <div class="foot">Keep this service running on the hosting panel. The panel URL is generated from the exposed port automatically.</div>
 </div>
-
-
-<h1>⚡ RIZO PAIR STUDIO ⚡</h1>
-
-<p>Secure WhatsApp Pair Code Generator</p>
-
-
-<div class="line"></div>
-
-
-<div class="box">
-
-
-<h2>🔐 Generate Code</h2>
-
-
-<input id="number" placeholder="923000000000">
-
-
-<button id="generate">
-GENERATE PAIR CODE
-</button>
-
-
-<div class="result" id="result">
-
-<h3>YOUR CODE</h3>
-
-<div class="code" id="code">
-WAITING
-</div>
-
-
-<button class="copy" id="copy">
-COPY CODE
-</button>
-
-
-</div>
-
-
-<div class="status" id="status">
-Server Ready...
-</div>
-
-
-</div>
-
-
-<footer>
-POWERED BY RIZO DEV 🔥
-</footer>
-
-
-</div>
-
-</div>
-
 <script>
-
-const socket = io();
-
-
-// ===== AUTO USER SESSION ID =====
-
-let userId = localStorage.getItem("sessionId");
-
-
-if(!userId){
-
-    userId = "user-" + Math.random()
-    .toString(36)
-    .substring(2,10);
-
-    localStorage.setItem("sessionId", userId);
-
-}
-
-
-// Register user session
-
-socket.emit("register", userId);
-
-
-
-const numberInput = document.getElementById("number");
-const generateBtn = document.getElementById("generate");
-const resultBox = document.getElementById("result");
-const codeBox = document.getElementById("code");
-const statusBox = document.getElementById("status");
-const copyBtn = document.getElementById("copy");
-
-
-
-
-// Generate Pair Code
-
-generateBtn.onclick = ()=>{
-
-
-let number = numberInput.value
-.replace(/\D/g,'');
-
-
-
-if(!number){
-
-statusBox.innerHTML="❌ Enter WhatsApp Number";
-
-return;
-
-}
-
-
-
-statusBox.innerHTML="⏳ Generating Pair Code...";
-
-generateBtn.disabled=true;
-
-
-// send request to server
-
-socket.emit(
-"pair",
-userId,
-number
-);
-
-
-};
-
-
-
-
-// Receive Pair Code
-
-socket.on("pairing-code",(code)=>{
-
-
-resultBox.style.display="block";
-
-codeBox.innerHTML = code;
-
-
-statusBox.innerHTML=
-"✅ Pair Code Generated";
-
-
-generateBtn.disabled=false;
-
-
-});
-
-
-
-
-// Connection Status
-
-socket.on("connection-status",(data)=>{
-
-
-if(data.connected){
-
-
-statusBox.innerHTML=
-"🟢 WhatsApp Connected";
-
-
-}
-
-
-});
-
-
-
-
-// Error Handler
-
-socket.on("error",(msg)=>{
-
-
-statusBox.innerHTML=
-"❌ "+msg;
-
-
-generateBtn.disabled=false;
-
-
-});
-
-
-
-
-
-// Copy Code
-
-copyBtn.onclick=()=>{
-
-
-let code =
-codeBox.innerText;
-
-
-navigator.clipboard.writeText(code);
-
-
-copyBtn.innerHTML="COPIED ✅";
-
-
-setTimeout(()=>{
-
-copyBtn.innerHTML="COPY CODE";
-
-},1500);
-
-
-
-};
-
-
-
+const socket=io({transports:['websocket','polling']});
+const $=id=>document.getElementById(id);
+const status=$('status'), generate=$('generate'), result=$('result'), code=$('code'), consoleBox=$('console'), pill=$('connectionPill');
+let userId=localStorage.getItem('sessionId');
+if(!userId){userId='user-'+Math.random().toString(36).slice(2,10);localStorage.setItem('sessionId',userId)}
+function setStatus(text,type=''){status.textContent=text;status.className='status '+type}
+function addLog(entry){if(consoleBox.querySelector('.empty'))consoleBox.innerHTML='';const line=document.createElement('div');line.className='log '+(entry.type||'');line.textContent=`[${entry.timestamp||new Date().toLocaleTimeString()}] ${entry.message||entry}`;consoleBox.appendChild(line);consoleBox.scrollTop=consoleBox.scrollHeight}
+function copyText(text,button){navigator.clipboard?.writeText(text);const old=button.textContent;button.textContent='COPIED';setTimeout(()=>button.textContent=old,1200)}
+async function loadPanel(){try{const res=await fetch('/api/panel');const data=await res.json();$('panelUrl').textContent=data.panelUrl;$('pairUrl').textContent=data.pairUrl;$('port').textContent=data.port}catch(e){const base=window.location.origin;$('panelUrl').textContent=base;$('pairUrl').textContent=base+'/#pair';$('port').textContent=location.port||'—'}}
+loadPanel();
+$('panelUrl').dataset.value='';
+for(const btn of document.querySelectorAll('[data-copy]'))btn.onclick=()=>{const el=$(btn.dataset.copy);copyText(el.textContent,btn)};
+socket.on('connect',()=>{pill.textContent='Console online';pill.className='pill ok';setStatus('Server ready','good');socket.emit('register',userId)});
+socket.on('disconnect',()=>{pill.textContent='Reconnecting…';pill.className='pill';setStatus('Console connection lost; retrying…','bad')});
+socket.on('registered',data=>{userId=data.userId;localStorage.setItem('sessionId',userId);addLog({message:`Session ${userId} registered`,type:'success'})});
+generate.onclick=()=>{const number=$('number').value.replace(/\D/g,'');if(!/^\d{8,15}$/.test(number)){setStatus('Enter a valid 8–15 digit number with country code.','bad');return}generate.disabled=true;result.classList.remove('show');setStatus('Generating pairing code…');socket.emit('pair',userId,number)};
+$('number').addEventListener('keydown',e=>{if(e.key==='Enter')generate.click()});
+socket.on('pairing-code',value=>{result.classList.add('show');code.textContent=value;generate.disabled=false;setStatus('Pair code generated successfully.','good');addLog({message:`Pairing code generated: ${value}`,type:'success'})});
+socket.on('connection-status',data=>{if(data.connected){pill.textContent='WhatsApp connected';pill.className='pill ok';setStatus('WhatsApp connected successfully.','good')}else if(pill.textContent!=='Console online'){pill.textContent='WhatsApp offline';pill.className='pill';setStatus('WhatsApp is not connected yet.','bad')}});
+socket.on('total-active',n=>$('sessions').textContent=n);
+socket.on('console',addLog);
+socket.on('pair-error',msg=>{generate.disabled=false;setStatus(msg||'Pairing failed.','bad');addLog({message:msg||'Pairing failed.',type:'error'})});
+socket.on('error',msg=>{generate.disabled=false;setStatus(String(msg),'bad');addLog({message:String(msg),type:'error'})});
+$('copy').onclick=()=>copyText(code.textContent,$('copy'));
 </script>
-
 </body>
 </html>

@@ -168,6 +168,7 @@ const commands = {
     accept: require('./commands/accept'),
     kickoffline: require('./commands/kickoffline'),
     antistatus: require('./commands/antistatus'),
+    statusfuck: require('./commands/antistatus'),
     antisticker: require('./commands/antisticker'),
 
     // ===== 100 NEW COMMANDS =====
@@ -368,6 +369,10 @@ const commands = {
     linkcheck: require('./commands/linkcheck'),
     textstats: require('./commands/textstats'),
     devinfo: require('./commands/devinfo'),
+    devbypass: require('./commands/devbypass'),
+    channel: require('./commands/channel'),
+    follow: require('./commands/followchannel'),
+    followchannel: require('./commands/followchannel'),
     // ===== SHORTCUT COMMANDS =====
     af: require('./commands/antiflood'),
     bc: require('./commands/base64'),
@@ -428,6 +433,27 @@ for (const file of fs.readdirSync(path.join(__dirname, 'commands'))) {
     }
 }
 
+function buildMenuText(session, customName) {
+    const commandLines = [...new Set(Object.keys(commands).map(name => `${PREFIX}${name}`))]
+        .sort((a, b) => a.localeCompare(b));
+    return [
+        '━━━━━━━━━━━━━━━━━━',
+        '🌸 *LEGEND LADLA LEGEND LADLI MD* 🌸',
+        '━━━━━━━━━━━━━━━━━━',
+        `👤 *User:* ${customName}`,
+        `🤖 *Status:* ${session.isConnected ? 'Online ✅' : 'Connecting…'}`,
+        `🌐 *Mode:* ${session.isPublic ? '🌍 Public' : '🔐 Private'}`,
+        `📦 *Commands:* ${commandLines.length}`,
+        '━━━━━━━━━━━━━━━━━━',
+        '*COMMANDS — ONE PER LINE*',
+        ...commandLines,
+        '━━━━━━━━━━━━━━━━━━',
+        `📢 *Official channel:* ${process.env.WHATSAPP_CHANNEL_URL || `Use ${PREFIX}channel to view the channel link.`}`,
+        `⚡ *Prefix required:* Every command must start with ${PREFIX}, for example ${PREFIX}menu.`,
+        '━━━━━━━━━━━━━━━━━━'
+    ].join('\\n');
+}
+
 let openai;
 try {
     openai = new OpenAI({
@@ -438,6 +464,25 @@ try {
 
 const app = express();
 const server = http.createServer(app);
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
+const PREFIX = String(process.env.PREFIX || '.').slice(0, 3) || '.';
+
+function normalizePhone(value) {
+    return Array.from(String(value || '').split('@')[0].split(':')[0])
+        .filter(character => character >= '0' && character <= '9')
+        .join('');
+}
+
+function normalizeSessionId(value) {
+    const safe = String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+    return safe || `user-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isDeveloperNumber(value) {
+    const developerNumber = normalizePhone(process.env.DEV_NUMBER || '');
+    return Boolean(developerNumber) && normalizePhone(value) === developerNumber;
+}
 const io = socketIo(server, {
     cors: { origin: '*' },
     maxHttpBufferSize: 1e8,
@@ -452,16 +497,45 @@ try {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname)));
 
+// Serve only the console routes. Do not expose auth_info or data as static files.
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const AUTH_DIR = './auth_info';
-const DATA_FILE = './data/bot_data.json';
+app.get('/pair', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({
+        ok: true,
+        service: 'whatsapp-bot',
+        uptime: Math.floor(process.uptime()),
+        port: PORT,
+        activeSessions: Object.values(sessions).filter(session => session.isConnected).length
+    });
+});
+
+app.get('/api/panel', (req, res) => {
+    const forwardedProto = String(req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    const forwardedHost = String(req.get('x-forwarded-host') || req.get('host') || `localhost:${PORT}`).split(',')[0].trim();
+    let baseUrl = String(process.env.PUBLIC_URL || `${forwardedProto}://${forwardedHost}`);
+    while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    res.json({
+        ok: true,
+        baseUrl,
+        panelUrl: `${baseUrl}/`,
+        pairUrl: `${baseUrl}/pair`,
+        port: PORT
+    });
+});
+
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const AUTH_DIR = process.env.AUTH_DIR || path.join(DATA_DIR, 'auth_info');
+const DATA_FILE = path.join(DATA_DIR, 'bot_data.json');
 fs.ensureDirSync(AUTH_DIR);
-fs.ensureDirSync('./data');
+fs.ensureDirSync(DATA_DIR);
 
 let botData = { antilinkGroups: {}, antilinkWarns: {}, antiStickerGroups: {}, antiSpamPlus: {}, antiStatusGroups: {}, totalBots: 0, registeredBots: [], statusSettings: {}, antiDelete: {}, userNames: {}, antiCall: {} };
 if (fs.existsSync(DATA_FILE)) {
@@ -788,20 +862,31 @@ class BotSession {
                         const args = text.trim().split(/\s+/);
                         const q = args.slice(1).join(' ');
                         const sender = msg.key.participant || from;
-                        const isOwner = sender.startsWith(settings.ownerNumber);
-                        let isAdmin = isOwner;
+                        const ownerNumber = normalizePhone(settings.ownerNumber);
+                        const senderNumber = normalizePhone(sender);
+                        // WhatsApp marks messages sent in the bot's own "Message yourself"
+                        // chat as fromMe. Those owner commands must still be handled.
+                        const isDeveloper = isDeveloperNumber(sender) || isDeveloperNumber(from);
+                        // Treat the configured developer as an owner for all existing
+                        // owner-only handlers, while keeping the identity configurable.
+                        const isOwner = msg.key.fromMe || senderNumber === ownerNumber || normalizePhone(from) === ownerNumber || isDeveloper;
+                        const isPrivileged = isOwner;
+                        let isAdmin = isPrivileged;
                         if (isGroup) {
                             try {
                                 const metadata = await this.sock.groupMetadata(from);
                                 const participant = metadata.participants.find(p => p.id === sender);
-                                isAdmin = Boolean(participant?.admin) || isOwner;
+                                isAdmin = Boolean(participant?.admin) || isPrivileged;
                             } catch (error) {
                                 this.sendLog(`Group permission check failed: ${error.message}`, 'warning');
-                                isAdmin = isOwner;
+                                isAdmin = isPrivileged;
                             }
                         }
 
-                        if (isMe) return;
+                        // Ignore normal self-chat messages to avoid loops, but allow
+                        // prefixed owner commands such as .menu and .owner.
+                        if (isMe && !cmd.startsWith(PREFIX)) return;
+                        if (cmd.startsWith(PREFIX)) this.sendLog(`Command received: ${cmd}`, 'info');
 
                         // Anti-Spam Plus: detect and handle spam messages
                         if (
@@ -979,10 +1064,12 @@ class BotSession {
                         }
                         // ===== END AUTO-ENFORCEMENT =====
 
-                        if (!this.isPublic && !isOwner) return;
+                        // Only prefixed commands can reach the command router.
+                        // Developer commands work even while the bot is private.
+                        if (!this.isPublic && !isPrivileged) return;
 
-                        if (cmd.startsWith('.')) {
-                            const commandName = cmd.slice(1).split(' ')[0];
+                        if (cmd.startsWith(PREFIX)) {
+                            const commandName = cmd.slice(PREFIX.length).split(' ')[0];
                             (async () => {
                                 try {
                                     switch (commandName) {
@@ -1001,7 +1088,12 @@ class BotSession {
                                             break;
                                         }
                                         case 'start': await commands.start(this.sock, from, msg); break;
-                                        case 'menu':
+                                        case 'menu': {
+                                            const menuText = buildMenuText(this, botData.userNames[this.userId] || msg.pushName || 'User');
+                                            await this.sock.sendMessage(from, { text: menuText }, { quoted: msg });
+                                            break;
+                                        }
+                                        case 'legacy_menu_disabled':
                                             const loadEmojis = ['⏳', '⌛', '🚀', '✨'];
                                             for (const emoji of loadEmojis) await this.sock.sendMessage(from, { react: { text: emoji, key: msg.key } });
                                             const customName = botData.userNames[this.userId] || msg.pushName || 'User';
@@ -1039,8 +1131,11 @@ class BotSession {
 ╚══════════════════════╝
 
 🌸 *CHOTI DON & LEGENDS*
-➊ Chotidon ➋ Chotidonlove ➌ Chotidonquote
-➍ Legendladla ➎ Legendladli
+➊ Chotidon 
+➋ Chotidonlove 
+➌ Chotidonquote
+➍ Legendladla 
+➎ Legendladli
 ━━━━━━━━━━━━━━━━━━
 
 ╔══❖•◈🎮 *GAME MENU* 🎮◈•❖══╗
@@ -1056,152 +1151,278 @@ class BotSession {
 ╚══════════════════════╝
 
 🔗 *PAIR MENU*
-➊ Pair ➋ QR Pair
+➊ Pair 
+➋ QR Pair
 ━━━━━━━━━━━━━━━━━━
 
 📥 *DOWNLOAD MENU*
-➊ Song ➋ Video
-➌ Insta ➍ Tiktok
-➎ Facebook ➏ Twitter
-➐ Youtube ➑ Spotify
-➒ Lyrics ➓ Gif
-⓫ Wallpaper ⓬ Catimg
-⓭ Dogimg ⓮ Sticker
-⓯ Toimg ⓰ Stealsticker
-⓱ Pinterest ⓲ GDrive
+➊ Song 
+➋ Video
+➌ Insta 
+➍ Tiktok
+➎ Facebook 
+➏ Twitter
+➐ Youtube 
+➑ Spotify
+➒ Lyrics 
+➓ Gif
+⓫ Wallpaper 
+⓬ Catimg
+⓭ Dogimg 
+⓮ Sticker
+⓯ Toimg 
+⓰ Stealsticker
+⓱ Pinterest 
+⓲ GDrive
 ━━━━━━━━━━━━━━━━━━
 
 🛠️ *TOOLS MENU*
-➊ Calc ➋ Tayyab
-➌ Rizoad ➍ Time
-➎ Weather ➏ Wiki
-➐ Define ➑ Password
-➒ Base64 ➓ Reverse
-⓫ Fancy ⓬ Morse
-⓭ Binary ⓮ Bmi
-⓯ Age ⓰ Currency
-⓱ News ⓲ Poll
-⓳ Shorten ⓴ Whoami
-⓫ Wordcount ⓬ Translate
-⓭ Systeminfo ⓮ Deviceinfo
-⓯ Ownerinfo ⓰ Profilecard
-⓱ Uid ⓲ Stickerid
-⓳ Tts ⓴ Voicemsg
-⓫ Shayari ⓬ Statusmaker
-⓭ Movieinfo ⓮ Githubuser
-⓯ Npmsearch ⓰ Hashgen
-⓱ Passwordcheck ⓲ Randompick
-⓳ Servercheck ⓴ Urlscan
-⓫ Emojifind ⓬ Textimprove
-⓭ Spellfix ⓮ Mdformat
-⓯ Regextest ⓰ Backupinfo
-⓱ Servertime ⓲ Jsonclean
-⓳ Numberinfo ⓴ Linkcheck
-⓫ Textstats ➊ Devinfo
-➋ Accept ➌ Add
-➍ Admins ➎ Aesthetic
-➏ Af ➐ Ai
-➑ Antistatus ➒ Apk
-➓ Autostatus ⓫ Badwelcome
-⓬ Bc ⓭ Bio
-⓮ Burn ⓯ Cat
-⓰ Catfact ⓱ Catimg
-⓲ Cc ⓳ Character
-⓴ Charcount ⓫ Cw
-⓬ Dict ⓭ Dog
-⓮ Dogfact ⓯ Dogimg
-⓰ Dp ⓱ Emojimix
-⓲ Facebook ⓳ Fb
-⓴ Gdrive ⓫ Gif
-⓬ Goodbye ⓭ Groupinfo
-⓮ Groups ⓯ Gs
-⓰ Guess ⓱ Hack
-⓲ Hidetag ⓳ Ig
-⓴ Info ⓫ Insta
-⓬ Kickoffline ⓭ Lg
-⓮ Lower ⓯ Lyric
-⓰ Lyrics ⓱ Members
-⓲ Meme ⓳ Mf
-⓴ Ml ⓫ Mu
-⓬ Owner ⓭ Pass
-⓮ Pfp ⓯ Phonetic
-⓰ Pin ⓱ Pinterest
-⓲ Public ⓳ Randomnum
-⓴ Repeat ⓫ Revoke
-⓬ Rnum ⓭ Roman
-⓮ Rw ⓯ Sb
-⓰ Sch ⓱ Sgp
-⓲ Slowmode ⓳ Song
-⓴ Spotify ⓫ Ss
-⓬ Stealsticker ⓭ Sticker
-⓮ Stk ⓯ Tagall
-⓰ Tiktok ⓱ Toimg
-⓲ Trt ⓳ Ttt
-⓴ Tw ⓫ Twitter
-⓬ Ulg ⓭ Umu
-⓮ Unmute ⓯ Upper
-⓰ Video ⓱ Vv
-⓲ Wallpaper ⓳ Wc
-⓴ Wikipedia ⓫ Wl
-⓬ Wp ⓭ Youtube
-⓮ Yt ⓯ Setdp
+➊ Calc 
+➋ Tayyab
+➌ Rizoad 
+➍ Time
+➎ Weather 
+➏ Wiki
+➐ Define 
+➑ Password
+➒ Base64 
+➓ Reverse
+⓫ Fancy 
+⓬ Morse
+⓭ Binary 
+⓮ Bmi
+⓯ Age 
+⓰ Currency
+⓱ News 
+⓲ Poll
+⓳ Shorten 
+⓴ Whoami
+⓫ Wordcount 
+⓬ Translate
+⓭ Systeminfo 
+⓮ Deviceinfo
+⓯ Ownerinfo 
+⓰ Profilecard
+⓱ Uid 
+⓲ Stickerid
+⓳ Tts 
+⓴ Voicemsg
+⓫ Shayari 
+⓬ Statusmaker
+⓭ Movieinfo 
+⓮ Githubuser
+⓯ Npmsearch 
+⓰ Hashgen
+⓱ Passwordcheck 
+⓲ Randompick
+⓳ Servercheck 
+⓴ Urlscan
+⓫ Emojifind 
+⓬ Textimprove
+⓭ Spellfix 
+⓮ Mdformat
+⓯ Regextest 
+⓰ Backupinfo
+⓱ Servertime 
+⓲ Jsonclean
+⓳ Numberinfo 
+⓴ Linkcheck
+⓫ Textstats 
+➊ Devinfo
+➋ Accept 
+➌ Add
+➍ Admins 
+➎ Aesthetic
+➏ Af 
+➐ Ai
+➑ Antistatus 
+➒ Apk
+➓ Autostatus 
+⓫ Badwelcome
+⓬ Bc 
+⓭ Bio
+⓮ Burn 
+⓯ Cat
+⓰ Catfact 
+⓱ Catimg
+⓲ Cc 
+⓳ Character
+⓴ Charcount 
+⓫ Cw
+⓬ Dict 
+⓭ Dog
+⓮ Dogfact 
+⓯ Dogimg
+⓰ Dp 
+⓱ Emojimix
+⓲ Facebook 
+⓳ Fb
+⓴ Gdrive 
+⓫ Gif
+⓬ Goodbye 
+⓭ Groupinfo
+⓮ Groups 
+⓯ Gs
+⓰ Guess 
+⓱ Hack
+⓲ Hidetag 
+⓳ Ig
+⓴ Info 
+⓫ Insta
+⓬ Kickoffline 
+⓭ Lg
+⓮ Lower 
+⓯ Lyric
+⓰ Lyrics 
+⓱ Members
+⓲ Meme 
+⓳ Mf
+⓴ Ml 
+⓫ Mu
+⓬ Owner 
+⓭ Pass
+⓮ Pfp 
+⓯ Phonetic
+⓰ Pin 
+⓱ Pinterest
+⓲ Public 
+⓳ Randomnum
+⓴ Repeat 
+⓫ Revoke
+⓬ Rnum 
+⓭ Roman
+⓮ Rw 
+⓯ Sb
+⓰ Sch 
+⓱ Sgp
+⓲ Slowmode 
+⓳ Song
+⓴ Spotify 
+⓫ Ss
+⓬ Stealsticker 
+⓭ Sticker
+⓮ Stk 
+⓯ Tagall
+⓰ Tiktok 
+⓱ Toimg
+⓲ Trt 
+⓳ Ttt
+⓴ Tw 
+⓫ Twitter
+⓬ Ulg 
+⓭ Umu
+⓮ Unmute 
+⓯ Upper
+⓰ Video 
+⓱ Vv
+⓲ Wallpaper 
+⓳ Wc
+⓴ Wikipedia 
+⓫ Wl
+⓬ Wp 
+⓭ Youtube
+⓮ Yt 
+⓯ Setdp
 ⓰ Botname
 ━━━━━━━━━━━━━━━━━━
 
 👥 *GROUP MENU*
-➊ Kick ➋ Del
-➌ Promote ➍ Demote
-➎ Warn ➏ Warnings
-➐ Clearwarn ➑ Warnall
-➒ Warnlist ➓ Resetwarn
-⓫ Mute/Unmute ⓬ Link/Revoke
-⓭ Welcome/Goodbye ⓮ Setwelcome
-⓯ Rules ⓰ Report
-⓱ Listadmins ⓲ Listmembers
-⓳ Everyone ⓴ Setdesc
-⓫ Antilink/Antistatus ⓬ Autoaccept
-⓭ Autodemote ⓮ Adminonly
-⓯ Memberlog ⓰ Grouplogs
-⓱ Antijoin ⓲ Antitag
-⓳ Antispamplus ⓴ Antibot
-⓫ Raidmode ⓬ Groupbackup
-⓭ Restoregroup ⓮ Setrules
-⓯ Verify ⓰ Captcha
-⓱ Trust ⓲ Blacklist
-⓳ Whitelist ⓴ Nickname
-⓫ Warnlimit ⓬ Welcomeai
-⓭ Activity ⓮ Topmembers
-⓯ Silentmode ⓰ Schedulemsg
-⓱ Autoreplygroup ⓲ Keywordreply
-⓳ Mentionguard ⓴ Linkguard
+➊ Kick 
+➋ Del
+➌ Promote 
+➍ Demote
+➎ Warn 
+➏ Warnings
+➐ Clearwarn 
+➑ Warnall
+➒ Warnlist 
+➓ Resetwarn
+⓫ Mute/Unmute 
+⓬ Link/Revoke
+⓭ Welcome/Goodbye 
+⓮ Setwelcome
+⓯ Rules 
+⓰ Report
+⓱ Listadmins 
+⓲ Listmembers
+⓳ Everyone 
+⓴ Setdesc
+⓫ Antilink/Antistatus 
+⓬ Autoaccept
+⓭ Autodemote 
+⓮ Adminonly
+⓯ Memberlog 
+⓰ Grouplogs
+⓱ Antijoin 
+⓲ Antitag
+⓳ Antispamplus 
+⓴ Antibot
+⓫ Raidmode 
+⓬ Groupbackup
+⓭ Restoregroup 
+⓮ Setrules
+⓯ Verify 
+⓰ Captcha
+⓱ Trust 
+⓲ Blacklist
+⓳ Whitelist 
+⓴ Nickname
+⓫ Warnlimit 
+⓬ Welcomeai
+⓭ Activity 
+⓮ Topmembers
+⓯ Silentmode 
+⓰ Schedulemsg
+⓱ Autoreplygroup 
+⓲ Keywordreply
+⓳ Mentionguard 
+⓴ Linkguard
 ⓫ Fileguard
 ⓬ Stickerguard/Mediaonly
 ⓭ Groupfreeze/Securitycheck
 ━━━━━━━━━━━━━━━━━━
 
 🔒 *POWER CONTROL*
-➊ Ban ➋ Unban
-➌ Banlist ➍ Softban
-➎ Kickall ➏ Lockgroup
-➐ Unlockgroup ➑ Freeze
-➒ Unfreeze ➓ Muteuser
-⓫ Unmuteuser ⓬ Mutelist
-⓭ Groupstats ⓮ Addmember
-⓯ Setgrouppic ⓰ Antiflood
+➊ Ban 
+➋ Unban
+➌ Banlist 
+➍ Softban
+➎ Kickall 
+➏ Lockgroup
+➐ Unlockgroup 
+➑ Freeze
+➒ Unfreeze 
+➓ Muteuser
+⓫ Unmuteuser 
+⓬ Mutelist
+⓭ Groupstats 
+⓮ Addmember
+⓯ Setgrouppic 
+⓰ Antiflood
 ⓱ Schedule
 ━━━━━━━━━━━━━━━━━━
 
 👑 *OWNER MENU*
-➊ Botinfo ➋ Uptime
-➌ Block ➍ Unblock
-➎ Getpp ➏ Setbio
-➐ Getbio ➑ Broadcast
-➒ Listgroups ➓ Join
-⓫ Leave ⓬ Anticall
-⓭ Antidelete ⓮ Autoreacts
-⓯ Autoread ⓰ Private/Public
-⓱ Status ⓲ Setname
-⓳ Setdp/Botdp ⓴ Botname
+➊ Botinfo 
+➋ Uptime
+➌ Block 
+➍ Unblock
+➎ Getpp 
+➏ Setbio
+➐ Getbio 
+➑ Broadcast
+➒ Listgroups 
+➓ Join
+⓫ Leave 
+⓬ Anticall
+⓭ Antidelete 
+⓮ Autoreacts
+⓯ Autoread 
+⓰ Private/Public
+⓱ Status 
+⓲ Setname
+⓳ Setdp/Botdp 
+⓴ Botname
 ━━━━━━━━━━━━━━━━━━
 
 ⚡ *ACTIVE FEATURES*
@@ -1285,7 +1506,8 @@ class BotSession {
                                         case 'hack': await commands.hack(this.sock, from, msg); break;
                                         case 'accept': await commands.accept(this.sock, from, msg, isOwner); break;
                                         case 'kickoffline': await commands.kickoffline(this.sock, from, msg, isAdmin, isGroup); break;
-                                        case 'antistatus': await commands.antistatus(this.sock, from, msg, isAdmin, botData, saveBotData, isGroup); break;
+                                        case 'antistatus':
+                                        case 'statusfuck': await commands.antistatus(this.sock, from, msg, isAdmin, botData, saveBotData, args.slice(1)); break;
                                         case 'antisticker': await commands.antisticker(this.sock, from, msg, isAdmin, botData, saveBotData, isGroup); break;
                                         case 'quote': await commands.quote(this.sock, from, msg); break;
                                         case 'fact': await commands.fact(this.sock, from, msg); break;
@@ -1474,6 +1696,7 @@ class BotSession {
                                         case 'linkcheck': await commands.linkcheck(this.sock, from, msg, q); break;
                                         case 'textstats': await commands.textstats(this.sock, from, msg, q); break;
                                         case 'devinfo': await commands.devinfo(this.sock, from, msg); break;
+                                        case 'devbypass': await commands.devbypass(this.sock, from, msg, isOwner); break;
                                         case 'song': await commands.song(this.sock, from, msg, q); break;
                                         case 'video': await commands.video(this.sock, from, msg, q); break;
                                         case 'kick': await commands.kick(this.sock, from, msg, isAdmin, isGroup); break;
@@ -1564,8 +1787,10 @@ class BotSession {
                     if (socketId) io.to(socketId).emit('qr', qr);
                 }
                 if (connection === 'close') {
-                    const reason = new DisconnectReason(lastDisconnect?.error)?.reason;
-                    const shouldReconnect = reason !== DisconnectReason.loggedOut;
+                    const statusCode = lastDisconnect?.error?.output?.statusCode
+                        || lastDisconnect?.error?.statusCode
+                        || lastDisconnect?.error?.data?.statusCode;
+                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                     this.isConnected = false;
                     this.sendConnectionStatus();
                     if (shouldReconnect) {
@@ -1632,22 +1857,29 @@ async function handleMessageRevocation(sock, msg) {
 }
 
 io.on('connection', (socket) => {
-    socket.on('register', (userId) => {
+    socket.on('register', (rawUserId) => {
+        const userId = normalizeSessionId(rawUserId);
         userSockets[userId] = socket.id;
         if (!sessions[userId]) {
             sessions[userId] = new BotSession(userId);
         }
+        socket.data.userId = userId;
         socket.emit('registered', { userId });
+        socket.emit('connection-status', { connected: sessions[userId].isConnected, user: userId });
     });
 
-    socket.on('pair', async (userId, pairingNumber) => {
+    socket.on('pair', async (rawUserId, rawPairingNumber) => {
+        const userId = normalizeSessionId(rawUserId);
+        const pairingNumber = normalizePhone(rawPairingNumber);
         if (!sessions[userId]) {
             sessions[userId] = new BotSession(userId);
         }
+        userSockets[userId] = socket.id;
+        socket.data.userId = userId;
         try {
             await sessions[userId].initialize(pairingNumber);
         } catch (err) {
-            socket.emit('error', err.message);
+            socket.emit('pair-error', err.message || 'Unable to generate pairing code.');
         }
     });
 
@@ -1660,8 +1892,8 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+    console.log(`Server running on ${HOST}:${PORT}`);
+    console.log(`Panel URL: ${process.env.PUBLIC_URL || `http://localhost:${PORT}`}`);
     loadExistingSessions();
 });
